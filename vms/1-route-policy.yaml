@@ -1,0 +1,82 @@
+# TODO: route
+# TODO: network policy
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: route-policy
+  namespace: vms
+  labels:
+    app: route-policy
+spec:
+  dataVolumeTemplates:
+    - metadata:
+        name: route-policy
+      spec:
+        preallocation: false
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: gp3-csi
+  running: false
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/flavor: small
+        vm.kubevirt.io/os: rhel9
+        vm.kubevirt.io/workload: server
+      labels:
+        kubevirt.io/domain: route-policy
+        kubevirt.io/size: small
+    spec:
+      accessCredentials:
+        - sshPublicKey:
+            propagationMethod:
+              noCloud: {}
+            source:
+              secret:
+                secretName: authorized-keys
+      architecture: amd64
+      domain:
+        cpu:
+          cores: 1
+          sockets: 32
+          threads: 1
+        devices:
+          disks:
+            - bootOrder: 1
+              disk:
+                bus: virtio
+              name: rootdisk
+            - bootOrder: 2
+              disk:
+                bus: virtio
+              name: cloudinitdisk
+          interfaces:
+            - masquerade: {}
+              model: virtio
+              name: default
+          networkInterfaceMultiqueue: true
+        machine:
+          type: pc-q35-rhel9.2.0
+        memory:
+          guest: 32Gi
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - dataVolume:
+            name: route-policy
+          name: rootdisk
+        - cloudInitNoCloud:
+            userData: |-
+              #cloud-config
+              user: rhel
+              password: xtg8-ly36-swy3
+              chpasswd: { expire: False }
+          name: cloudinitdisk

@@ -1,0 +1,126 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rsyslog-config
+  namespace: vms
+data:
+  rsyslog.conf: |
+    # NOTE: create the tls configmap with the following:
+    # - mkdir cert; cd cert; oc -n openshift-logging extract secret/collector-syslog-receiver --confirm; cd ..
+    # - mkdir ca;   cd ca;   oc extract secret/signing-key --confirm -n openshift-service-ca;            cd ..
+    # - oc create configmap syslog-tls --from-file=client-cert.pem=cert/tls.crt --from-file=client-key.pem=cert/tls.key --from-file=ca-cert.pem=ca/tls.crt
+    # Set certificate files
+    global(
+      DefaultNetstreamDriverCAFile="/etc/pki/ca-trust/source/anchors/ca-cert.pem"
+      DefaultNetstreamDriverCertFile="/etc/pki/ca-trust/source/anchors/client-cert.pem"
+      DefaultNetstreamDriverKeyFile="/etc/pki/ca-trust/source/anchors/client-key.pem"
+    )
+
+    # Set up the action for all messages
+    *.* action(
+      type="omfwd"
+      StreamDriver="ossl"
+      StreamDriverMode="1"
+      StreamDriverPermittedPeers="cloudwatch-vms.openshift-logging.svc"
+      StreamDriverAuthMode="x509/name"
+      target="cloudwatch-vms.openshift-logging.svc.cluster.local" port="10514" protocol="tcp"
+    ) 
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: logging
+  namespace: vms
+  labels:
+    app: logging
+spec:
+  dataVolumeTemplates:
+    - metadata:
+        name: logging
+      spec:
+        preallocation: false
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: gp3-csi
+  running: true
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/flavor: small
+        vm.kubevirt.io/os: rhel9
+        vm.kubevirt.io/workload: server
+      labels:
+        kubevirt.io/domain: logging
+        kubevirt.io/size: small
+    spec:
+      accessCredentials:
+        - sshPublicKey:
+            propagationMethod:
+              noCloud: {}
+            source:
+              secret:
+                secretName: authorized-keys
+      architecture: amd64
+      domain:
+        cpu:
+          cores: 1
+          sockets: 32
+          threads: 1
+        devices:
+          disks:
+            - bootOrder: 1
+              disk:
+                bus: virtio
+              name: rootdisk
+            - bootOrder: 2
+              disk:
+                bus: virtio
+              name: cloudinitdisk
+            - name: rsyslog-config
+              serial: RSYSLOGCONFIG
+            - name: syslog-tls
+              serial: SYSLOGTLS
+          interfaces:
+            - masquerade: {}
+              model: virtio
+              name: default
+          networkInterfaceMultiqueue: true
+        machine:
+          type: pc-q35-rhel9.2.0
+        memory:
+          guest: 32Gi
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: syslog-tls
+          configMap:
+            name: syslog-tls
+        - name: rsyslog-config
+          configMap:
+            name: rsyslog-config
+        - dataVolume:
+            name: logging
+          name: rootdisk
+        - cloudInitNoCloud:
+            # deleted the following lines from bootcmd:
+            bootcmd:
+            - "sudo mkdir -p /mnt/configs/rsyslog-config"
+            - "sudo mkdir -p /mnt/configs/syslog-tls"
+            - "sudo mount /dev/$(lsblk --nodeps -no name,serial | grep RSYSLOGCONFIG | cut -f1 -d' ') /mnt/configs/rsyslog-config"
+            - "sudo mount /dev/$(lsblk --nodeps -no name,serial | grep SYSLOGTLS | cut -f1 -d' ') /mnt/configs/syslog-tls"
+            - "sudo cp /mnt/configs/syslog-tls/* /etc/pki/ca-trust/source/anchors/"
+            - "sudo cp /mnt/configs/rsyslog-config/* /etc/rsyslog.d/"
+            userData: |-
+              #cloud-config
+              user: rhel
+              password: xtg8-ly36-swy3
+              chpasswd: { expire: False }
+          name: cloudinitdisk

@@ -1,0 +1,96 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudwatch
+  namespace: openshift-logging
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudwatch-application
+subjects:
+  - kind: ServiceAccount
+    name: cloudwatch
+    namespace: openshift-logging
+roleRef:
+  kind: ClusterRole
+  name: collect-application-logs
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudwatch-audit
+subjects:
+  - kind: ServiceAccount
+    name: cloudwatch
+    namespace: openshift-logging
+roleRef:
+  kind: ClusterRole
+  name: collect-audit-logs
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudwatch-infrastructure
+subjects:
+  - kind: ServiceAccount
+    name: cloudwatch
+    namespace: openshift-logging
+roleRef:
+  kind: ClusterRole
+  name: collect-infrastructure-logs
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudwatch-credentials
+  namespace: openshift-logging
+stringData:
+  credentials: |-
+    [default]
+    sts_regional_endpoints = regional
+    role_arn = arn:aws:iam::660250927410:role/dscott-cloudwatch
+    web_identity_token_file = /var/run/secrets/openshift/serviceaccount/token
+---
+apiVersion: logging.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: cloudwatch
+  namespace: openshift-logging
+spec:
+  serviceAccountName: cloudwatch
+  outputs:
+   - name: cw 
+     type: cloudwatch 
+     cloudwatch:
+       groupBy: logType
+       groupPrefix: dscott-cluster
+       region: us-west-2
+     secret:
+        name: cloudwatch-credentials
+  pipelines:
+    - name: default
+      inputRefs:
+        - infrastructure
+        - audit
+        - application
+      outputRefs:
+        - cw
+    - name: vms
+      labels:
+        vm: "true"
+      inputRefs:
+        - vms
+      outputRefs:
+        - cw
+  inputs:
+    - name: vms
+      receiver:
+        type: syslog
+        syslog:
+          port: 10514
