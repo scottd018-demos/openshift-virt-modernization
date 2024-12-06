@@ -1,5 +1,20 @@
-# TODO: route
-# TODO: network policy
+# TODO: route/service
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-specific-ip-range
+  namespace: vms
+spec:
+  podSelector:
+    matchLabels:
+      app: route-policy
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+      - ipBlock:
+          cidr: 10.10.0.0/16
 ---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
