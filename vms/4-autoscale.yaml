@@ -21,8 +21,8 @@ spec:
             requests:
               storage: 30Gi
           storageClassName: gp3-csi
-  running: false
-  # running: true
+  #running: false
+  running: true
   template:
     metadata:
       annotations:
