@@ -17,4 +17,4 @@
    1.  Open CloudWatch
    2.  Tail log group
    3.  `logger -p local0.info "This is a test log message"`
-11. Demonstarte autoscaling event
+11. Demonstrate autoscaling event
