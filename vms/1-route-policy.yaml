@@ -1,22 +1,8 @@
 ---
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: nginx
-  namespace: vms
-spec:
-  to:
-    kind: Service
-    name: nginx
-    weight: 100
-  port:
-    targetPort: 80
-  wildcardPolicy: None
----
 apiVersion: v1
 kind: Service
 metadata:
-  name: nginx
+  name: route-policy
   namespace: vms
 spec:
   selector:
@@ -25,11 +11,29 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 80
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: route-policy
+  namespace: vms
+spec:
+  to:
+    kind: Service
+    name: route-policy
+    weight: 100
+  port:
+    targetPort: 80
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-specific-ip-range
+  name: route-policy
   namespace: vms
 spec:
   podSelector:
@@ -58,7 +62,7 @@ spec:
         preallocation: false
         sourceRef:
           kind: DataSource
-          name: rhel9
+          name: fedora
           namespace: openshift-virtualization-os-images
         storage:
           resources:
@@ -70,9 +74,10 @@ spec:
     metadata:
       annotations:
         vm.kubevirt.io/flavor: small
-        vm.kubevirt.io/os: rhel9
+        vm.kubevirt.io/os: fedora
         vm.kubevirt.io/workload: server
       labels:
+        app: route-policy
         kubevirt.io/domain: route-policy
         kubevirt.io/size: small
     spec:
@@ -89,6 +94,9 @@ spec:
           cores: 1
           sockets: 32
           threads: 1
+        resources:
+          requests:
+            cpu: 32
         devices:
           disks:
             - bootOrder: 1
@@ -118,7 +126,22 @@ spec:
         - cloudInitNoCloud:
             userData: |-
               #cloud-config
-              user: rhel
+              user: fedora
               password: xtg8-ly36-swy3
               chpasswd: { expire: False }
+              runcmd:
+                - sudo dnf install -y nginx
+                - sudo systemctl enable nginx
+                - |
+                  sudo cat <<EOF > /usr/share/nginx/html/index.html
+                  <html>
+                  <body>
+                  <h1>DEMO ONLY</h1><br>
+                  <b>THIS DEMO SHOWS AN APP SECURED BY NETWORK POLICY</b><br>
+                  <hr>
+                  Hello World!
+                  </body>
+                  </html>
+                  EOF
+                - sudo systemctl start nginx
           name: cloudinitdisk

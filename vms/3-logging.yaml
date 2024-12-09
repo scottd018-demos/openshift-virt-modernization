@@ -15,6 +15,8 @@ data:
       DefaultNetstreamDriverCAFile="/etc/pki/ca-trust/source/anchors/ca-cert.pem"
       DefaultNetstreamDriverCertFile="/etc/pki/ca-trust/source/anchors/client-cert.pem"
       DefaultNetstreamDriverKeyFile="/etc/pki/ca-trust/source/anchors/client-key.pem"
+      DefaultNetstreamDriverTLSMinVersion="TLSv1.2"
+      DefaultNetstreamDriverTLSMaxVersion="TLSv1.2"
     )
 
     # Set up the action for all messages
@@ -25,7 +27,7 @@ data:
       StreamDriverPermittedPeers="cloudwatch-vms.openshift-logging.svc"
       StreamDriverAuthMode="x509/name"
       target="cloudwatch-vms.openshift-logging.svc.cluster.local" port="10514" protocol="tcp"
-    ) 
+    )
 ---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -42,7 +44,7 @@ spec:
         preallocation: false
         sourceRef:
           kind: DataSource
-          name: rhel9
+          name: fedora
           namespace: openshift-virtualization-os-images
         storage:
           resources:
@@ -54,9 +56,10 @@ spec:
     metadata:
       annotations:
         vm.kubevirt.io/flavor: small
-        vm.kubevirt.io/os: rhel9
+        vm.kubevirt.io/os: fedora
         vm.kubevirt.io/workload: server
       labels:
+        app: logging
         kubevirt.io/domain: logging
         kubevirt.io/size: small
     spec:
@@ -73,6 +76,9 @@ spec:
           cores: 1
           sockets: 32
           threads: 1
+        resources:
+          requests:
+            cpu: 32
         devices:
           disks:
             - bootOrder: 1
@@ -110,17 +116,20 @@ spec:
             name: logging
           name: rootdisk
         - cloudInitNoCloud:
-            # deleted the following lines from bootcmd:
-            bootcmd:
-            - "sudo mkdir -p /mnt/configs/rsyslog-config"
-            - "sudo mkdir -p /mnt/configs/syslog-tls"
-            - "sudo mount /dev/$(lsblk --nodeps -no name,serial | grep RSYSLOGCONFIG | cut -f1 -d' ') /mnt/configs/rsyslog-config"
-            - "sudo mount /dev/$(lsblk --nodeps -no name,serial | grep SYSLOGTLS | cut -f1 -d' ') /mnt/configs/syslog-tls"
-            - "sudo cp /mnt/configs/syslog-tls/* /etc/pki/ca-trust/source/anchors/"
-            - "sudo cp /mnt/configs/rsyslog-config/* /etc/rsyslog.d/"
             userData: |-
               #cloud-config
-              user: rhel
+              user: fedora
               password: xtg8-ly36-swy3
               chpasswd: { expire: False }
+              runcmd:
+                - sudo mkdir -p /mnt/configs/rsyslog-config
+                - sudo mkdir -p /mnt/configs/syslog-tls
+                - sudo mount /dev/$(lsblk --nodeps -no name,serial | grep RSYSLOGCONFIG | cut -f1 -d' ') /mnt/configs/rsyslog-config
+                - sudo mount /dev/$(lsblk --nodeps -no name,serial | grep SYSLOGTLS | cut -f1 -d' ') /mnt/configs/syslog-tls
+                - sudo dnf install -y rsyslog rsyslog-openssl
+                - sudo cp /mnt/configs/syslog-tls/* /etc/pki/ca-trust/source/anchors/
+                - sudo cp /mnt/configs/rsyslog-config/* /etc/rsyslog.d/
+                - sudo systemctl enable rsyslog
+                - sudo systemctl start rsyslog
+                - logger -p local0.info "This is a test log message"
           name: cloudinitdisk

@@ -29,6 +29,7 @@ spec:
         vm.kubevirt.io/os: rhel9
         vm.kubevirt.io/workload: server
       labels:
+        app: autoscale
         kubevirt.io/domain: autoscale
         kubevirt.io/size: small
     spec:
@@ -45,6 +46,9 @@ spec:
           cores: 1
           sockets: 32
           threads: 1
+        resources:
+          requests:
+            cpu: 32
         devices:
           disks:
             - bootOrder: 1
