@@ -1,3 +1,14 @@
 tmp/*
 ca/*
 cert/*
+
+**/*.tfstate
+**/*.backup
+**/*.terraform
+**/*.terraform.lock.hcl
+.terraform
+**/*.plan
+.tfstate
+.tfstate.backup
+main.plan
+.terraform.tfstate.lock.info

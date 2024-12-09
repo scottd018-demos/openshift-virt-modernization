@@ -1,4 +1,30 @@
-# TODO: route/service
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: nginx
+  namespace: vms
+spec:
+  to:
+    kind: Service
+    name: nginx
+    weight: 100
+  port:
+    targetPort: 80
+  wildcardPolicy: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: vms
+spec:
+  selector:
+    app: route-policy
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -39,7 +65,7 @@ spec:
             requests:
               storage: 30Gi
           storageClassName: gp3-csi
-  running: false
+  running: true
   template:
     metadata:
       annotations:
